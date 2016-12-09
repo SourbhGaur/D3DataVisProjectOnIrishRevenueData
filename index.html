@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Data Visualisation Mini Research Project</title>
+<style>
+body{
+    width:1060px;
+    margin:50px auto;
+    background-color:#E6E6FA;
+    }
+path {  stroke: #fff; }
+path:hover {  opacity:0.9; }
+rect:hover {  fill:blue ; }
+.axis {  font: 10px sans-serif; }
+.legend tr{    border-bottom:1px solid grey; }
+.legend tr:first-child{    border-top:1px solid grey; }
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.x.axis path {  display: none; }
+.legend{
+    margin-bottom:76px;
+    display:inline-block;
+    border-collapse: collapse;
+    border-spacing: 0px;
+}
+.legend td{
+    padding:6px 7px;
+    vertical-align:top;
+}
+.legendFreq, .legendPerc{
+    align:top;
+    width:60px;
+    font-family: Verdana;
+    font-size: 13px;
+}
+
+.title {
+    font-family: Verdana;
+    font-size: 15px;    
+}
+
+.font {
+    font-family: Verdana;
+    font-size: 10px;    
+}
+
+.legendFont {
+    font-family: Verdana;
+    font-size: 13px;    
+}
+
+.barChartTitle {
+    font-family: Verdana;
+    font-size  : 24px;
+    fill       : grey;
+    text-anchor: middle;
+    font-weight: bold;
+    /*font-style: italic;*/
+}
+
+select {
+  font-family: Cursive;
+  font-size: 15px;
+}
+
+</style>
+</head>
+<meta charset="utf-8">
+<body>
+
+<div id='dashboard'>
+</div>
+
+<select id="Select" name="Select" onchange="updateData(this.id)">
+  <option value="">Choose Year</option>
+  <!-- <option value="year2011.csv">2011</option> -->
+  <option value="year2012.csv">2012</option>
+  <option value="year2013.csv">2013</option>
+  <option value="year2014.csv">2014</option>
+</select>
+
+<script src="./d3.min.js"></script>
+<script>
+
+function dashboard(id, fData){
+    var barColor = 'steelblue';
+    function segColor(c){ 
+        return {Vat_tax:"#66a61e", Pay_Income_Tax:"#e7298a",Self_Employed_Tax:"#7570b3",Corporate_Tax:"#d95f02",Capital_Gain:"#1b9e77"}[c];}
+    
+     // compute total for each state.
+     fData.forEach(function(d){
+        d.total = d.tax.Vat_tax + d.tax.Pay_Income_Tax + d.tax.Self_Employed_Tax + d.tax.Corporate_Tax + d.tax.Capital_Gain;});
+
+     var year = fData[0].year;
+
+     
+    // function to handle histogram.
+    function histoGram(fD){
+        var hG={},    
+        hGDim = {t:40, r: 0, b: 20, l: 0};
+        hGDim.w = 1300 - hGDim.l - hGDim.r, 
+        hGDim.h = 400 - hGDim.t - hGDim.b;
+            
+        //create svg for histogram.
+        var hGsvg = d3.select(id).append("svg")
+            .attr("width", hGDim.w + hGDim.l + hGDim.r)
+            .attr("height", hGDim.h + hGDim.t + hGDim.b)
+            .append("g")
+            .attr("transform", "translate(" + hGDim.l + "," + hGDim.t + ")");
+
+        // create function for x-axis mapping.
+        var x = d3.scale.ordinal().rangeRoundBands([0, hGDim.w], 0.1)
+                .domain(fD.map(function(d) { return d[0]; }));
+
+        // Add x-axis to the histogram svg.
+        hGsvg.append("g").attr("class", "x axis")
+            .attr("transform", "translate(0," + hGDim.h + ")")
+            .call(d3.svg.axis().scale(x).orient("bottom"))
+            .selectAll("text")  
+            .style("text-anchor", "middle")
+            .attr("dx", ".100em")
+            .attr("dy", ".15em")
+            //.attr("transform", "rotate(-11)" )
+            .attr("font-family", "Verdana")
+            .attr("font-size", "8px")
+            .attr("fill", "black")
+            .attr("font-weight","bold");
+
+
+        // Create function for y-axis map.
+        var y = d3.scale.linear().range([hGDim.h, 0])
+                .domain([0, d3.max(fD, function(d) { return d[1]; })]);
+
+        // Create bars for histogram to contain rectangles and freq labels.
+        var bars = hGsvg.selectAll(".bar").data(fD).enter()
+                .append("g").attr("class", "bar");
+        
+        //create the rectangles.
+        bars .append("rect")
+            .attr("x", function(d) { return x(d[0]); })
+            .attr("y", function(d) { return y(d[1]); })
+            .attr("width", x.rangeBand())
+            .attr("height", function(d) { return hGDim.h - y(d[1]); })
+            .attr('fill',barColor)
+            .on("mouseover",mouseover)// mouseover is defined below.
+            .on("mouseout",mouseout);// mouseout is defined below.
+            
+        //Create the frequency labels above the rectangles.
+        bars.append("text")
+            .text(function(d){ return d3.format(",")(d3.round(d[1],2))})
+            .attr("x", function(d) { return x(d[0])+x.rangeBand()/2; })
+            .attr("y", function(d) { return y(d[1])-5; })
+            .attr("text-anchor", "middle")
+            .attr("class","font");
+
+        hGsvg.append("text")
+        .attr("x", (hGDim.w/1.65))             
+        .attr("y", (hGDim.t/0.4))
+        .attr("class","barChartTitle")
+        .html("Ireland:Total Annual Revenue in Million Euros"+"</br>"+"(per county):Year"+year)
+        
+        function mouseover(d){  // utility function to be called on mouseover.
+            // filter for selected state.
+            var st = fData.filter(function(s){ return s.State == d[0];})[0],
+                nD = d3.keys(st.tax).map(function(s){ return {type:s, tax:st.tax[s]};});
+            // call update functions of pie-chart and legend.    
+            pC.update(nD);
+            leg.update(nD);
+        }
+        
+        function mouseout(d){    // utility function to be called on mouseout.
+            // reset the pie-chart and legend.    
+            pC.update(tF);
+            leg.update(tF);
+
+        
+        }
+        
+        // create function to update the bars. This will be used by pie-chart.
+        hG.update = function(nD, color){
+            // update the domain of the y-axis map to reflect change in frequencies.
+            y.domain([0, d3.max(nD, function(d) { return d[1]; })]);
+            
+            // Attach the new data to the bars.
+            var bars = hGsvg.selectAll(".bar").data(nD);
+            
+            // transition the height and color of rectangles.
+            bars.select("rect").transition().duration(500)
+                .attr("y", function(d) {return y(d[1]); })
+                .attr("height", function(d) { return hGDim.h - y(d[1]); })
+                .attr("fill", color);
+
+            // transition the tax labels and change value.
+            bars.select("text").transition().duration(500)
+                .text(function(d){ return d3.format(",")(d[1])})
+                .attr("y", function(d) {return y(d[1])-5; });            
+        }
+
+        return hG;
+    }
+    
+    //function to handle pieChart.
+    function pieChart(pD){
+        var pC ={},    
+        pieDim ={w:300, h: 300};
+        pieDim.r = Math.min(pieDim.w, pieDim.h) / 2;
+                
+        // create svg for pie chart.
+        var piesvg = d3.select(id).append("svg")
+            .attr("width", pieDim.w).attr("height", pieDim.h).append("g")
+            .attr("transform", "translate("+pieDim.w/2+","+pieDim.h/2+")");
+        
+        // create function to draw the arcs of the pie slices.
+        var arc = d3.svg.arc().outerRadius(pieDim.r - 10).innerRadius(0);
+
+        // create a function to compute the pie slice angles.
+        var pie = d3.layout.pie().sort(null).value(function(d) { return d.tax; });
+
+        // Draw the pie slices.
+        piesvg.selectAll("path").data(pie(pD)).enter().append("path").attr("d", arc)
+            .each(function(d) { this._current = d; })
+            .style("fill", function(d) { return segColor(d.data.type); })
+            .on("mouseover",mouseover).on("mouseout",mouseout);
+
+        piesvg.append("svg:text")
+          .attr("dy", ".35em")
+          .attr("text-anchor", "middle")
+          .text("Revenue BreakDown "+year)
+          .attr("class","title");
+
+        // create function to update pie-chart. This will be used by histogram.
+        pC.update = function(nD){
+            piesvg.selectAll("path").data(pie(nD)).transition().duration(500)
+                .attrTween("d", arcTween);
+        }        
+        // Utility function to be called on mouseover a pie slice.
+        function mouseover(d){
+            // call the update function of histogram with new data.
+            hG.update(fData.map(function(v){ 
+                return [v.State,v.tax[d.data.type]];}),segColor(d.data.type));
+        }
+        //Utility function to be called on mouseout a pie slice.
+        function mouseout(d){
+            // call the update function of histogram with all data.
+            hG.update(fData.map(function(v){
+                return [v.State,d3.round(v.total,2)];}), barColor);
+        }
+        // Animating the pie-slice requiring a custom function which specifies
+        // how the intermediate paths should be drawn.
+        function arcTween(a) {
+            var i = d3.interpolate(this._current, a);
+            this._current = i(0);
+            return function(t) { return arc(i(t));    };
+        }    
+        return pC;
+    }
+    
+    //function to handle legend.
+    function legend(lD){
+        var leg = {};
+            
+        // create table for legend.
+        var legend = d3.select(id).append("table").attr('class','legend');
+        
+        // create one row per segment.
+        var tr = legend.append("tbody").selectAll("tr").data(lD).enter().append("tr");
+            
+        // create the first column for each segment.
+        tr.append("td").append("svg").attr("width", '16').attr("height", '16').append("rect")
+            .attr("width", '16').attr("height", '16')
+			.attr("fill",function(d){ return segColor(d.type); });
+            
+        // create the second column for each segment.
+        tr.append("td")
+          .text(function(d){ return d.type;})
+          .attr("class","legendFont");
+
+        // create the third column for each segment.
+        tr.append("td").attr("class",'legendFreq')
+            .text(function(d){ return d3.format(",")(d3.round(d.tax,2));});
+
+        // create the fourth column for each segment.
+        tr.append("td").attr("class",'legendPerc')
+            .text(function(d){ return getLegend(d,lD);});
+
+        // Utility function to be used to update the legend.
+        leg.update = function(nD){
+            // update the data attached to the row elements.
+            var l = legend.select("tbody").selectAll("tr").data(nD);
+
+            // update the frequencies.
+            l.select(".legendFreq").text(function(d){ return d3.format(",")(d3.round(d.tax,2));});
+
+            // update the percentage column.
+            l.select(".legendPerc").text(function(d){ return getLegend(d,nD);});        
+        }
+        
+        function getLegend(d,aD){ // Utility function to compute percentage.
+            return d3.format("%")(d.tax/d3.sum(aD.map(function(v){ return v.tax; })));
+        }
+
+        return leg;
+    }
+    
+    // calculate tax by segment for all county.
+    var tF = ['Vat_tax','Pay_Income_Tax','Self_Employed_Tax','Corporate_Tax','Capital_Gain'].map(function(d){ 
+        return {type:d, tax: d3.sum(fData.map(function(t){ return t.tax[d];}))}; 
+    });    
+    
+    // calculate total tax by county for all segment.
+    var sF = fData.map(function(d){return [d.State,d3.round(d.total,2)];});
+
+    var hG = histoGram(sF), // create the histogram.
+        pC = pieChart(tF), // create the pie-chart.
+        leg= legend(tF);  // create the legend.
+
+    
+    
+   
+}
+</script>
+
+<script>
+  // For the first screen on the page
+d3.csv("year2011.csv", function(d) {
+    return {    State : d.State,
+                year: d.Year,
+                tax:{Vat_tax:+d.Vat_MillionEuro, Pay_Income_Tax:+d.Paye_Income_Tax_MillionEuro,Self_Employed_Tax:+d.Self_Employed_MillionEuro,
+                Corporate_Tax:+d.Corporate_Tax_MillionEuro,Capital_Gain:+d.Capital_Gain_MillionEuro}
+            };
+    },function(data) {
+   dataset = data;
+   dashboard('#dashboard',data)});
+
+   function updateData(s){
+    var s = document.getElementById(s);
+    var fileName = s.value;
+
+    d3.csv(fileName, function(d) {
+    return {    State : d.State,
+                year: d.Year,
+                tax:{Vat_tax:+d.Vat_MillionEuro, Pay_Income_Tax:+d.Paye_Income_Tax_MillionEuro,Self_Employed_Tax:+d.Self_Employed_MillionEuro,
+                Corporate_Tax:+d.Corporate_Tax_MillionEuro,Capital_Gain:+d.Capital_Gain_MillionEuro}
+            };
+    },function(data) {
+   dataset = data;
+   dashboard('#dashboard',data); 
+   console.log("year2011 first");
+   
+});
+
+}
+</script>
+</html>
